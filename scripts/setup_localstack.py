@@ -4,6 +4,8 @@ Crea la DLQ primero y luego la cola principal con su política de reintento.
 Es idempotente: si las colas ya existen, no falla.
 """
 
+import json
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -76,7 +78,7 @@ def create_main_queue(sqs_client, dlq_arn: str):
     response = sqs_client.create_queue(
         QueueName=QUEUE_NAME,
         Attributes={
-            "RedrivePolicy": str(redrive_policy)
+            "RedrivePolicy": json.dumps(redrive_policy)
         }
     )
     queue_url = response["QueueUrl"]

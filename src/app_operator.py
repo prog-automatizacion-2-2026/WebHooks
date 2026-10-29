@@ -31,7 +31,7 @@ import uvicorn
 from vulcano_telemetry import core_sqs, exceptions, logging_engine, sanitizer
 from vulcano_telemetry import webhook_crypto, webhook_receiver
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("vulcano_telemetry")
 
 DEFAULT_ENDPOINT = os.getenv("VULCANO_AWS_ENDPOINT", "http://localhost:4566")
 DEFAULT_QUEUE_NAME = "vulcano-events-queue"
@@ -121,8 +121,11 @@ def cmd_produce_sqs(args: argparse.Namespace) -> None:
 
 def cmd_start_receiver(args: argparse.Namespace) -> None:
     """Levanta el receptor de Rene con la configuración recibida por CLI."""
-    os.environ["VULCANO_QUEUE_URL"] = _queue_url(args.queue)
+    queue_url = _queue_url(args.queue)
+    os.environ["VULCANO_QUEUE_URL"] = queue_url
     os.environ["VULCANO_WEBHOOK_SECRET"] = args.secret
+    webhook_receiver.QUEUE_URL = queue_url
+    webhook_receiver.WEBHOOK_SECRET = args.secret
     logger.info("Receptor escuchando en http://%s:%s", RECEIVER_HOST, RECEIVER_PORT)
     uvicorn.run(webhook_receiver.app, host=RECEIVER_HOST, port=RECEIVER_PORT)
 
@@ -163,7 +166,9 @@ def dispatch_webhook(target_url: str, secret: str, payload_dict: dict[str, Any])
 def main(argv: Sequence[str] | None = None) -> int:
     """Punto de entrada: parsea argumentos, ejecuta y apaga de forma ordenada."""
     args = build_parser().parse_args(argv)
-    listener = logging_engine.setup_vulcano_logging()
+    logger, listener = logging_engine.setup_vulcano_logging()
+    if listener is not None:
+        listener.start()
     exit_code = 0
     try:
         try:
@@ -179,6 +184,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         except* exceptions.SQSConnectionError as group:
             exit_code = 1
             logger.error("Errores de conexión con SQS: %s (agrupados)", len(group.exceptions))
+        except* exceptions.VulcanoError as group:
+            exit_code = 1
+            logger.error("Errores del motor Vulcano: %s (agrupados)", len(group.exceptions))
     except KeyboardInterrupt:
         logger.info("Apagado solicitado por el usuario")
     finally:

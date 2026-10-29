@@ -1,15 +1,9 @@
 """Tests forenses de los logs JSON y la rotación Gzip.
 
-Titular: Francisco (rama ``feature/franciscodiaz``).
+Titular: Francisco (rama ``feature/francisco-diaz``).
 
-TODO(Francisco): implementar con pytest según la consigna §4.2 y el
-instructivo §1:
-
-- abrir los ``*.log.gz`` con ``gzip`` y parsear cada línea como JSON;
-- validar presencia de ``TraceId``, ``MessageId`` y la referencia a
-  ``X-Webhook-Signature``;
-- verificar que la descompresión no pierde datos (tamaño/contenido contra el
-  original antes del gzip).
+Cubren la apertura de ``*.log.gz``, el parseo de cada línea como JSON, la
+presencia de ``TraceId``/``MessageId`` y la integridad de la descompresión.
 """
 import os
 import json

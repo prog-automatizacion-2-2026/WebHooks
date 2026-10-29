@@ -1,7 +1,7 @@
 """
 Script de inicialización de colas en LocalStack.
 Crea la DLQ primero y luego la cola principal con su política de reintento.
-Es idempotente: si las colas ya existen, no falla[span_2](start_span)[span_2](end_span).
+Es idempotente: si las colas ya existen, no falla.
 """
 
 import boto3
@@ -49,7 +49,7 @@ def get_queue_arn(sqs_client, queue_url: str) -> str:
 
 
 def create_dlq(sqs_client):
-    """Crea la Dead Letter Queue si no existe y devuelve su URL[span_3](start_span)[span_3](end_span)."""
+    """Crea la Dead Letter Queue si no existe y devuelve su URL."""
     existing_url = get_queue_url(sqs_client, DLQ_NAME)
     if existing_url:
         print(f"DLQ '{DLQ_NAME}' ya existe: {existing_url}")
@@ -62,7 +62,7 @@ def create_dlq(sqs_client):
 
 
 def create_main_queue(sqs_client, dlq_arn: str):
-    """Crea la cola principal con la política de Redrive hacia la DLQ[span_4](start_span)[span_4](end_span)."""
+    """Crea la cola principal con la política de Redrive hacia la DLQ."""
     existing_url = get_queue_url(sqs_client, QUEUE_NAME)
     if existing_url:
         print(f"Cola principal '{QUEUE_NAME}' ya existe: {existing_url}")

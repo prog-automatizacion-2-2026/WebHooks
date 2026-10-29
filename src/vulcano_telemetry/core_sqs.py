@@ -35,7 +35,7 @@ def produce_event(
     """
     Envía un evento a la cola SQS.
     Agrega atributos de mensaje: TraceId, EventTopic y Timestamp.
-    Devuelve el MessageId asignado por SQS[span_1](start_span)[span_1](end_span).
+    Devuelve el MessageId asignado por SQS.
     """
     body = json.dumps(event_data, ensure_ascii=False)
 
@@ -72,7 +72,7 @@ def consume_events(
 ):
     """
     Consume mensajes de la cola usando Long Polling.
-    Solo borra el mensaje tras procesamiento exitoso[span_2](start_span)[span_2](end_span).
+    Solo borra el mensaje tras procesamiento exitoso.
     Yielda cada mensaje parseado como diccionario Python.
     """
     try:
@@ -80,13 +80,13 @@ def consume_events(
             QueueUrl=queue_url,
             WaitTimeSeconds=wait_time,
             MaxNumberOfMessages=max_messages,
-            VisibilityTimeout=30,  # <-- Agregado según requerimiento del instructivo[span_3](start_span)[span_3](end_span)
+            VisibilityTimeout=30,
             AttributeNames=["All"],
             MessageAttributeNames=["All"]
         )
     except ClientError as e:
         err = SQSConnectionError(f"Error al conectar o leer desde la cola: {e}")
-        err.add_note(f"Endpoint: {sqs_client._endpoint}")  # <-- Uso del método oficial .add_note()[span_4](start_span)[span_4](end_span)
+        err.add_note(f"Endpoint: {sqs_client._endpoint}")
         raise err from e
 
     if "Messages" not in response:
@@ -102,7 +102,7 @@ def consume_events(
             corrupted_err = CorruptedMessageError(
                 f"Mensaje {message_id} no contiene JSON válido"
             )
-            corrupted_err.add_note(f"Contenido: {msg['Body'][:100]}...")  # <-- Uso del método oficial .add_note()[span_5](start_span)[span_5](end_span)
+            corrupted_err.add_note(f"Contenido: {msg['Body'][:100]}...")
             raise corrupted_err from e
 
         try:

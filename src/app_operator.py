@@ -130,16 +130,14 @@ def cmd_start_receiver(args: argparse.Namespace) -> None:
 def cmd_start_dispatcher(args: argparse.Namespace) -> None:
     """Consume SQS con long polling y despacha cada evento al destino.
 
-    TODO(Ariel): ajustar el borrado del mensaje al contrato final de
-    ``consume_events`` (solo se borra tras el despacho exitoso; si falla,
-    queda para el reintento y su paso a la DLQ).
+    ``consume_events`` borra el mensaje recién cuando el despacho termina sin
+    excepciones; si falla, queda en la cola para el reintento y su paso a la DLQ.
     """
     client = core_sqs.get_sqs_client(endpoint_url=DEFAULT_ENDPOINT)
     queue_url = _queue_url(args.queue)
     logger.info("Despachador escuchando %s (wait_time=%ss)", queue_url, args.wait_time)
     for message in core_sqs.consume_events(client, queue_url, wait_time=args.wait_time):
-        payload = json.loads(message["Body"])
-        dispatch_webhook(args.url, args.secret, payload)
+        dispatch_webhook(args.url, args.secret, message["body"])
 
 
 def dispatch_webhook(target_url: str, secret: str, payload_dict: dict[str, Any]) -> None:

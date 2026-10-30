@@ -60,7 +60,7 @@ pip install -r requirements.txt
 LocalStack y colas:
 
 ```bash
-docker run --rm -d -p 4566:4566 --name vulcano-localstack localstack/localstack
+docker run --rm -d -p 4566:4566 --name vulcano-localstack localstack/localstack:3
 python scripts/setup_localstack.py
 ```
 
@@ -100,4 +100,4 @@ python -m pytest
 | Rene | Seguridad HMAC + receptor + caos | `webhook_crypto.py`, `webhook_receiver.py`, `tests/test_chaos.py` |
 | Francisco | Observabilidad + forense | `logging_engine.py`, `tests/test_forensic_log.py` |
 
-Flujo de trabajo: `main` (releases) / `develop` (integración) / una rama `feature/nombreapellido` por integrante; todo entra por Pull Request con 1 aprobación.
+Flujo de trabajo: `main` (releases) / `develop` (integración) / una rama `feature/nombreapellido` por integrante; todo entra por Pull Request con revisión (la aprobación no bloquea el merge).

@@ -37,6 +37,9 @@ WebHooks/
 │   └── test_trazabilidad.py      # TraceId/MessageId/WebhookId de punta a punta
 ├── scripts/
 │   └── setup_localstack.py       # crea las colas y la DLQ (idempotente)
+├── tools/
+│   ├── send_webhook.py           # envía un webhook firmado de prueba (202 / 401)
+│   └── demo_sink.py              # destino de prueba que imprime lo que recibe
 ├── requirements.txt
 ├── pytest.ini
 └── README.md
@@ -85,6 +88,19 @@ python src/app_operator.py start-dispatcher   # consume SQS y despacha
 ```
 
 Flags globales: `--queue`, `--wait-time`, `--url`, `--secret` (validados por `sanitizer.py`).
+
+## Demo local de punta a punta
+
+Con LocalStack levantado y las colas creadas, en cuatro terminales (venv activado):
+
+```bash
+python src/app_operator.py start-receiver                                    # T1: receptor en :8000
+python tools/demo_sink.py                                                    # T2: destino en :8001
+python tools/send_webhook.py && python tools/send_webhook.py --invalid       # T3: 202 y 401
+python src/app_operator.py start-dispatcher --url http://127.0.0.1:8001/     # T3: entrega al destino
+```
+
+El sink imprime `RECIBIDO: {"event": "payment_completed", "amount": 1500}` y la terminal del despachador muestra el mismo `TraceId` que devolvió el `202`. Pasar siempre `--url`: el valor por defecto apunta al propio receptor.
 
 ## Trazabilidad y logs
 

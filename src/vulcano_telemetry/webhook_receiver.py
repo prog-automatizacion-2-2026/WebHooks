@@ -25,7 +25,7 @@ except ImportError:
 app = FastAPI(title="Vulcano Webhook Receiver API", version="1.0.0")
 
 # Variables de entorno con valores por defecto para desarrollo local
-WEBHOOK_SECRET = os.getenv("VULCANO_WEBHOOK_SECRET", "super_secret_key_123456789")
+WEBHOOK_SECRET = os.getenv("VULCANO_WEBHOOK_SECRET", "vulcano-dev-secret-2026")
 QUEUE_URL = os.getenv(
     "VULCANO_QUEUE_URL",
     "http://localhost:4566/000000000000/vulcano-events-queue"

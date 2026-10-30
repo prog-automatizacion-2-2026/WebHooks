@@ -33,7 +33,8 @@ WebHooks/
 │   └── app_operator.py           # CLI: produce-sqs | start-receiver | start-dispatcher
 ├── tests/
 │   ├── test_chaos.py             # firmas inválidas y mensajes venenosos
-│   └── test_forensic_log.py      # logs JSON y descompresión Gzip
+│   ├── test_forensic_log.py      # logs JSON, Gzip y serialización de ExceptionGroup
+│   └── test_trazabilidad.py      # TraceId/MessageId/WebhookId de punta a punta
 ├── scripts/
 │   └── setup_localstack.py       # crea las colas y la DLQ (idempotente)
 ├── requirements.txt
@@ -85,11 +86,21 @@ python src/app_operator.py start-dispatcher   # consume SQS y despacha
 
 Flags globales: `--queue`, `--wait-time`, `--url`, `--secret` (validados por `sanitizer.py`).
 
+## Trazabilidad y logs
+
+Cada evento lleva un **TraceId**: lo genera el receptor (o lo toma del header `X-Trace-Id` si viene) y lo devuelve en la respuesta `202`. Viaja como atributo del mensaje SQS (`TraceId`, `EventTopic` y `Timestamp`) y el despachador lo reenvía al destino en el header `X-Trace-Id`.
+
+Cada línea de `vulcano_events.log` es un JSON con `timestamp` (ISO 8601 UTC), `logger`, `level`, `message`, `process_id`, `thread_name`, `TraceId`, `MessageId` y `WebhookId`. Los errores se guardan en el campo `exception`, con el `ExceptionGroup` completo: subexcepciones, notas de `add_note()` y causa encadenada. El CLI también muestra una versión corta en la terminal.
+
+Para seguir un evento: `Select-String vulcano_events.log -Pattern <trace_id>` (PowerShell) o `grep <trace_id> vulcano_events.log`.
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
+
+`test_poison_message_derivation_to_dlq` usa LocalStack si está levantado (si no, se omite) y publica un mensaje de prueba en la cola principal.
 
 ## Equipo y roles
 

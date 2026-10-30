@@ -18,12 +18,14 @@ try:
         WebhookTimestampError,
     )
     from vulcano_telemetry.core_sqs import get_sqs_client, produce_event
+    from vulcano_telemetry.logging_engine import is_valid_trace_id
 except ImportError:
     from webhook_crypto import verify_signature
     class WebhookSignatureError(Exception): pass
     class WebhookTimestampError(Exception): pass
     def get_sqs_client(endpoint_url=None): return None
     def produce_event(sqs_client, queue_url, event_data, *, trace_id=None): return "msg-id-12345"
+    def is_valid_trace_id(value): return False
 
 app = FastAPI(title="Vulcano Webhook Receiver API", version="1.0.0")
 
@@ -44,9 +46,11 @@ async def receive_webhook(request: Request):
     """Receptor asíncrono de webhooks.
 
     Verifica firma HMAC en tiempo constante y encola el mensaje en SQS.
-    Cada pedido lleva un TraceId: el del header ``X-Trace-Id`` o uno nuevo.
+    Cada pedido lleva un TraceId: el del header ``X-Trace-Id`` si tiene un
+    formato seguro (``[A-Za-z0-9._-]{1,64}``) o uno nuevo (UUID4).
     """
-    trace_id = request.headers.get("X-Trace-Id") or str(uuid.uuid4())
+    incoming = request.headers.get("X-Trace-Id")
+    trace_id = incoming if is_valid_trace_id(incoming) else str(uuid.uuid4())
 
     # 1. Obtener bytes crudos obligatoriamente antes de parsear JSON
     raw_bytes = await request.body()

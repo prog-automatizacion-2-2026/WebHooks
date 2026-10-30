@@ -130,3 +130,28 @@ def test_dispatch_failure_raises_delivery_error_with_note(monkeypatch):
         app_operator.dispatch_webhook("http://destino/", "x" * 16, {"a": 1})
     assert isinstance(info.value.__cause__, requests.ConnectionError)
     assert "Causa: ConnectionError" in info.value.__notes__
+
+
+def test_receiver_ignores_unsafe_trace_header(receiver):
+    """Un TraceId con caracteres no permitidos se reemplaza por uno generado."""
+    client, captured = receiver
+    payload = b'{"event":"payment_completed"}'
+    headers = _signed_headers(payload, **{"X-Trace-Id": 'falso" nivel=CRITICAL {}'})
+    response = client.post("/webhook", content=payload, headers=headers)
+    trace_id = response.json()["trace_id"]
+    assert trace_id != 'falso" nivel=CRITICAL {}'
+    assert captured["trace_id"] == trace_id
+
+
+def test_dispatch_drops_unsafe_trace_id(monkeypatch):
+    sent = {}
+
+    def fake_post(url, data, headers, timeout):
+        sent.update(headers=headers)
+        return _OkResponse()
+
+    monkeypatch.setattr(app_operator.requests, "post", fake_post)
+    app_operator.dispatch_webhook("http://destino/", "x" * 16, {"a": 1}, trace_id="a\r\nX-Evil: 1")
+    assert "X-Trace-Id" not in sent["headers"]
+    message = {"attributes": {"TraceId": {"StringValue": "a\r\nb"}}, "body": {}}
+    assert app_operator.trace_context(message)["TraceId"] is None

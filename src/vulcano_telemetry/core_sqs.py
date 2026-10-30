@@ -4,6 +4,9 @@ Usa Boto3 contra LocalStack como broker de mensajería.
 """
 
 import json
+import time
+import uuid
+
 import boto3
 from botocore.exceptions import ClientError
 from typing import Optional, Dict, Any
@@ -30,31 +33,34 @@ def get_sqs_client(endpoint_url: str = "http://localhost:4566"):
 def produce_event(
     sqs_client,
     queue_url: str,
-    event_data: Dict[str, Any]
+    event_data: Dict[str, Any],
+    *,
+    trace_id: Optional[str] = None,
 ) -> str:
     """
     Envía un evento a la cola SQS.
-    Agrega atributos de mensaje: TraceId, EventTopic y Timestamp.
+    Siempre agrega los atributos de mensaje TraceId, EventTopic y Timestamp:
+      - TraceId: el ``trace_id`` recibido, el del evento o uno nuevo (UUID4).
+      - EventTopic: ``topic``, ``event_topic`` o ``event`` del evento ("unknown" si falta).
+      - Timestamp: ``timestamp`` del evento o el momento actual (epoch).
     Devuelve el MessageId asignado por SQS.
     """
     body = json.dumps(event_data, ensure_ascii=False)
 
-    message_attributes = {}
-    if "trace_id" in event_data:
-        message_attributes["TraceId"] = {
-            "StringValue": event_data["trace_id"],
-            "DataType": "String"
-        }
-    if "topic" in event_data:
-        message_attributes["EventTopic"] = {
-            "StringValue": event_data["topic"],
-            "DataType": "String"
-        }
-    if "timestamp" in event_data:
-        message_attributes["Timestamp"] = {
-            "StringValue": str(event_data["timestamp"]),
-            "DataType": "String"
-        }
+    trace = trace_id or event_data.get("trace_id") or str(uuid.uuid4())
+    topic = (
+        event_data.get("topic")
+        or event_data.get("event_topic")
+        or event_data.get("event")
+        or "unknown"
+    )
+    timestamp = event_data.get("timestamp") or int(time.time())
+
+    message_attributes = {
+        "TraceId": {"StringValue": str(trace), "DataType": "String"},
+        "EventTopic": {"StringValue": str(topic), "DataType": "String"},
+        "Timestamp": {"StringValue": str(timestamp), "DataType": "String"},
+    }
 
     response = sqs_client.send_message(
         QueueUrl=queue_url,
@@ -86,7 +92,7 @@ def consume_events(
         )
     except ClientError as e:
         err = SQSConnectionError(f"Error al conectar o leer desde la cola: {e}")
-        err.add_note(f"Endpoint: {sqs_client._endpoint}")
+        err.add_note(f"Endpoint: {sqs_client.meta.endpoint_url}")
         raise err from e
 
     if "Messages" not in response:
@@ -105,16 +111,15 @@ def consume_events(
             corrupted_err.add_note(f"Contenido: {msg['Body'][:100]}...")
             raise corrupted_err from e
 
-        try:
-            yield {
-                "message_id": message_id,
-                "body": body,
-                "receipt_handle": receipt_handle,
-                "attributes": msg.get("MessageAttributes", {})
-            }
-            sqs_client.delete_message(
-                QueueUrl=queue_url,
-                ReceiptHandle=receipt_handle
-            )
-        except Exception:
-            raise
+        # Si el consumidor falla durante el yield, la excepción corta el
+        # generador acá y el delete no se ejecuta: el mensaje vuelve a la cola.
+        yield {
+            "message_id": message_id,
+            "body": body,
+            "receipt_handle": receipt_handle,
+            "attributes": msg.get("MessageAttributes", {})
+        }
+        sqs_client.delete_message(
+            QueueUrl=queue_url,
+            ReceiptHandle=receipt_handle
+        )

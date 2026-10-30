@@ -16,10 +16,20 @@ import logging
 import logging.handlers
 import os
 import queue
+import re
 import shutil
 import sys
 import traceback
 from datetime import datetime, timezone
+
+# Formato aceptado para un TraceId que llega desde afuera (header o mensaje).
+_TRACE_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}")
+
+
+def is_valid_trace_id(value):
+    """True si ``value`` es un TraceId seguro para logs y headers HTTP."""
+    return isinstance(value, str) and _TRACE_ID_PATTERN.fullmatch(value) is not None
+
 
 # Campos de trazabilidad que siempre aparecen en cada línea (null si no aplica).
 TRACE_FIELDS = ("TraceId", "MessageId", "WebhookId")
@@ -91,7 +101,11 @@ class ConsoleFormatter(logging.Formatter):
     def format(self, record):
         text = super().format(record)
         trace_id = getattr(record, "TraceId", None)
-        return f"{text} [TraceId={trace_id}]" if trace_id else text
+        if not trace_id:
+            return text
+        # Escapa caracteres de control para que no se puedan falsificar líneas
+        safe = str(trace_id).encode("unicode_escape").decode("ascii")[:64]
+        return f"{text} [TraceId={safe}]"
 
 
 class VulcanoQueueHandler(logging.handlers.QueueHandler):

@@ -169,6 +169,8 @@ def trace_context(message: dict[str, Any]) -> dict[str, Any]:
     body = message.get("body")
     body = body if isinstance(body, dict) else {}
     trace_id = attributes.get("TraceId", {}).get("StringValue") or body.get("trace_id")
+    if not logging_engine.is_valid_trace_id(trace_id):
+        trace_id = None
     return {
         "TraceId": trace_id,
         "MessageId": message.get("message_id"),
@@ -195,12 +197,12 @@ def dispatch_webhook(
         "Content-Type": "application/json",
         "X-Webhook-Signature": f"t={timestamp},v1={signature}",
     }
-    if trace_id:
+    if logging_engine.is_valid_trace_id(trace_id):
         headers["X-Trace-Id"] = trace_id
     try:
         response = requests.post(target_url, data=payload_bytes, headers=headers, timeout=10)
         response.raise_for_status()
-    except requests.RequestException as exc:
+    except (requests.RequestException, ValueError) as exc:
         error = exceptions.WebhookDeliveryError(f"Falló la entrega a {target_url}")
         error.add_note(f"Causa: {type(exc).__name__}")
         raise error from exc

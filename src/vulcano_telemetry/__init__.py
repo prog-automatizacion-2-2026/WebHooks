@@ -15,7 +15,12 @@ from .exceptions import (
     WebhookSignatureError,
     WebhookTimestampError,
 )
-from .logging_engine import AsyncJSONFormatter, gzip_rotator, setup_vulcano_logging
+from .logging_engine import (
+    AsyncJSONFormatter,
+    gzip_rotator,
+    serialize_exception,
+    setup_vulcano_logging,
+)
 from .sanitizer import (
     parse_queue_name,
     parse_secret_key,
@@ -25,7 +30,7 @@ from .sanitizer import (
 from .webhook_crypto import generate_signature, verify_signature
 from .webhook_receiver import WEBHOOK_SECRET, app
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "AsyncJSONFormatter",
@@ -47,6 +52,7 @@ __all__ = [
     "parse_wait_time",
     "parse_webhook_url",
     "produce_event",
+    "serialize_exception",
     "setup_vulcano_logging",
     "verify_signature",
 ]

@@ -21,6 +21,8 @@ flowchart LR
 
 ```text
 WebHooks/
+├── .github/
+│   └── pull_request_template.md  # checklist de cada Pull Request
 ├── src/
 │   ├── vulcano_telemetry/
 │   │   ├── __init__.py           # API pública del paquete
@@ -40,10 +42,23 @@ WebHooks/
 ├── tools/
 │   ├── send_webhook.py           # envía un webhook firmado de prueba (202 / 401)
 │   └── demo_sink.py              # destino de prueba que imprime lo que recibe
-├── requirements.txt
-├── pytest.ini
+├── .gitignore                    # venv, caches, logs y archivos locales fuera del repo
+├── requirements.txt              # boto3, fastapi, uvicorn, requests, pytest, httpx
+├── pytest.ini                    # pythonpath = src, testpaths = tests
 └── README.md
 ```
+
+### Qué hace cada pieza
+
+| Archivo | Responsabilidad |
+|---|---|
+| `webhook_receiver.py` | Recibe `POST /webhook`, verifica la firma HMAC antes de tocar el JSON, encola el evento y responde `202` con `message_id` y `trace_id` (o `401`/`400` si algo no cierra). |
+| `webhook_crypto.py` | Firma y verifica `t=<timestamp>,v1=<hmac>` con `hmac.compare_digest` y ventana anti-replay de 300 s. |
+| `core_sqs.py` | `produce_event()` publica con los atributos `TraceId`, `EventTopic` y `Timestamp`; `consume_events()` hace long polling y borra el mensaje solo si la entrega salió bien. |
+| `app_operator.py` | CLI con tres subcomandos; el despachador firma y entrega cada evento y agrupa las fallas en un `ExceptionGroup` que se maneja con `except*`. |
+| `logging_engine.py` | Logs JSON en UTC mediante `QueueHandler`/`QueueListener` (no bloquean el request), rotación con compresión Gzip y serialización completa de `ExceptionGroup`. |
+| `exceptions.py` / `sanitizer.py` | Excepciones con nombre propio y validación de los argumentos del CLI. |
+| `setup_localstack.py` | Crea la cola principal y la DLQ con `maxReceiveCount = 3` (se puede correr varias veces). |
 
 ## Requisitos
 
@@ -113,10 +128,38 @@ Para seguir un evento: `Select-String vulcano_events.log -Pattern <trace_id>` (P
 ## Tests
 
 ```bash
-python -m pytest
+python -m pytest        # 16 tests
 ```
 
-`test_poison_message_derivation_to_dlq` usa LocalStack si está levantado (si no, se omite) y publica un mensaje de prueba en la cola principal.
+| Archivo | Qué verifica |
+|---|---|
+| `test_chaos.py` | Firma alterada, timestamp vencido (ataque de replay) y mensaje venenoso que termina en la DLQ. |
+| `test_forensic_log.py` | Formato JSON, timestamps UTC, compresión Gzip al rotar y serialización de `ExceptionGroup` (subexcepciones, notas y causa). |
+| `test_trazabilidad.py` | El `TraceId` viaja del receptor a SQS y al despacho; un header `X-Trace-Id` inseguro se descarta; las fallas de entrega llevan su nota de causa. |
+
+`test_poison_message_derivation_to_dlq` usa LocalStack si está levantado (si no, se omite) y publica un mensaje de prueba en la cola principal: purgar la cola antes de una demo.
+
+## Cómo lo construimos (paso a paso)
+
+1. **Planificación y andamiaje (18–19/10).** Se definió la arquitectura, se repartieron los módulos por integrante y se creó la estructura del repo con las ramas `main` y `develop`, una rama por integrante y la plantilla de Pull Request (PR #1).
+2. **Desarrollo en paralelo (23–28/10).** Cada integrante trabajó en su rama `feature/…`:
+   - Clelia: excepciones, sanitizador, cliente SQS y script de LocalStack.
+   - Rene: firma HMAC, receptor FastAPI y tests de caos.
+   - Francisco: motor de logs asíncrono JSON con Gzip y tests forenses.
+   - Ariel: CLI `app_operator` con sus subcomandos y despacho firmado.
+3. **Integración por Pull Request (28/10).** Se mergearon los PR #2 a #6 en `develop`. Luego se limpió el código antes de la entrega (dependencias de test, artefactos, TODOs y API pública del paquete; PR #7).
+4. **Prueba contra LocalStack (28–30/10).** Al correr todo junto aparecieron fallas de integración y se corrigieron (PR #8): la redrive policy de la DLQ no era JSON válido, faltaba arrancar el listener de logs y el receptor no tomaba su configuración. Se fijó LocalStack Community `:3`, que no requiere token.
+5. **Trazabilidad y observabilidad.** Se agregó el `TraceId` de punta a punta (header → atributo SQS → header del despacho), los campos `TraceId`/`MessageId`/`WebhookId` en cada línea de log y la serialización de `ExceptionGroup`. Ese estado se publicó como release **v1.0.0**.
+6. **Endurecimiento de seguridad.** El `TraceId` recibido de afuera se valida (`[A-Za-z0-9._-]{1,64}`) antes de loguearlo o reenviarlo, para evitar inyección en los logs y en los headers.
+7. **Demo y video (30/10).** Se sumaron `tools/send_webhook.py` y `tools/demo_sink.py` para mostrar el flujo completo (202, 401, entrega al destino y mismo `TraceId` en el log), y se grabó el video de la exposición.
+
+Cada cambio entró por una rama propia y se mergeó a `develop` sin fast-forward (`--no-ff`). `main` solo recibe lo que ya se probó en `develop`.
+
+## Entrega
+
+- Versión: tag **`v1.0.0`** sobre `main`.
+- Video de la demo: link publicado en el aula virtual.
+- Comprobación rápida: `python -m pytest`, que debe dar 16 tests aprobados, y la [demo local](#demo-local-de-punta-a-punta).
 
 ## Equipo y roles
 
